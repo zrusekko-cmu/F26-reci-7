@@ -18,12 +18,11 @@ const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 const wordFrom = (letters: string) =>
   fc.array(fc.constantFrom(...letters), { minLength: 5, maxLength: 5 }).map(cs => cs.join(''));
 
-// const word = wordFrom(ALPHABET);
-const word = wordFrom('ABC');
+const word = fc.oneof(wordFrom('ABC'), wordFrom(ALPHABET));
 
 describe('matchGuess', () => {
 
-  // it.todo('returns exactly five colors');
+  // Pattern: invariant. The result always have exactly five colors.
   it('returns exactly five colors', () => {
     fc.assert(
       fc.property(word, word, (secret, guess) => {
@@ -32,7 +31,7 @@ describe('matchGuess', () => {
     );
   });
 
-  // it.todo('only uses the colors G, Y, B');
+  // Pattern: invariant. Every color is G, Y, or B.
   it('only uses the colors G, Y, B', () => {
     fc.assert(
       fc.property(word, word, (secret, guess) => {
@@ -41,7 +40,7 @@ describe('matchGuess', () => {
     );
   });
 
-  // it.todo('guessing the secret gives all greens');
+  // Pattern: conditional. Guessing the secret gives all greens.
   it('guessing the secret gives all greens', () => {
     fc.assert(
       fc.property(word, w => {
@@ -51,7 +50,7 @@ describe('matchGuess', () => {
   });
   
 
-  // it.todo('never credits a letter more times than the secret contains it');
+  // Pattern: invariant. A letter is never credited more times than the secret contains it.
   it('never credits a letter more times than the secret contains it', () => {
     fc.assert(
       fc.property(word, word, (secret, guess) => {
@@ -62,6 +61,57 @@ describe('matchGuess', () => {
           expect(credited).toBeLessThanOrEqual(inSecret);
         }
       }),
+    );
+  });
+
+  // Pattern: invariant. A position is green exactly when guess and secret have the same letter there.
+  it('green exactly where letters match in place for guess and secret', () => {
+    fc.assert(
+      fc.property(word, word, (secret, guess) => {
+        for (let index = 0; index < 5; index++) {
+          expect(matchGuess(secret, guess)[index] === 'G').toBe(guess[index] === secret[index]);
+        }
+      }),
+    );
+  });
+
+  // Pattern: conditional. If the guess is a rearrangement of the secret, no square is black.
+  it('an anagram of the secret has no black squares', () => {
+    fc.assert(
+      fc.property(
+        word.chain(secret =>
+          fc.tuple(
+            fc.constant(secret),
+            fc
+              .shuffledSubarray([...secret], { minLength: 5, maxLength: 5 })
+              .map(letters => letters.join('')),
+          ),
+        ),
+        ([secret, guess]) => {
+          expect(matchGuess(secret, guess)).not.toContain('B');
+        },
+      ),
+    );
+  });
+
+  // Pattern: metamorphic. Applying the same one-to-one letter substitution to both words preserves the result.
+  it('preserves the result when letters are consistently substituted', () => {
+    fc.assert(
+      fc.property(
+        word,
+        word,
+        fc.shuffledSubarray([...ALPHABET], { minLength: 26, maxLength: 26 }),
+        (secret, guess, letterMapping) => {
+          const substituteLetters = (word: string) =>
+            [...word]
+              .map(letter => letterMapping[ALPHABET.indexOf(letter)])
+              .join('');
+
+          expect(
+            matchGuess(substituteLetters(secret), substituteLetters(guess)),
+          ).toEqual(matchGuess(secret, guess));
+        },
+      ),
     );
   });
 });
